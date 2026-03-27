@@ -1,22 +1,20 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { getOccupancyTier, EMERGENCY_LOCATION, getDistanceKm } from "./utils";
+import { getOccupancyTier, getDistanceKm } from "./utils";
 
-// ─── Fix Leaflet default icon paths (Vite asset quirk) ─────────────────────
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// ─── SVG Pulse Marker Factory ───────────────────────────────────────────────
 const TIER_COLORS = {
-  green:  { fill: "#22c55e", glow: "#4ade80", ring: "#16a34a" },
-  yellow: { fill: "#eab308", glow: "#facc15", ring: "#ca8a04" },
-  red:    { fill: "#ef4444", glow: "#f87171", ring: "#dc2626" },
+  green:  { fill: "#22c55e", ring: "#16a34a" },
+  yellow: { fill: "#eab308", ring: "#ca8a04" },
+  red:    { fill: "#ef4444", ring: "#dc2626" },
 };
 
 function createHospitalIcon(tier, isSelected = false) {
@@ -32,94 +30,81 @@ function createHospitalIcon(tier, isSelected = false) {
       <text x="22" y="27" text-anchor="middle" font-size="14" font-weight="bold" fill="white" font-family="monospace">H</text>
       ${isSelected ? `<circle cx="22" cy="22" r="20" fill="none" stroke="white" stroke-width="2.5" stroke-dasharray="4 3"/>` : ""}
     </svg>`;
-  return L.divIcon({
-    html: svg,
-    className: "",
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    popupAnchor: [0, -size / 2],
-  });
+  return L.divIcon({ html: svg, className: "", iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2] });
 }
 
-function createEmergencyIcon() {
+function createUserIcon() {
   const svg = `
     <svg width="40" height="40" viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
       <circle cx="20" cy="20" r="18" fill="#ef4444" fill-opacity="0.15" stroke="#ef4444" stroke-width="1.5">
-        <animate attributeName="r" values="18;22;18" dur="1.5s" repeatCount="indefinite"/>
-        <animate attributeName="fill-opacity" values="0.15;0.05;0.15" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="r" values="18;23;18" dur="1.5s" repeatCount="indefinite"/>
+        <animate attributeName="fill-opacity" values="0.15;0.04;0.15" dur="1.5s" repeatCount="indefinite"/>
       </circle>
       <circle cx="20" cy="20" r="10" fill="#ef4444"/>
       <text x="20" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="white">!</text>
     </svg>`;
-  return L.divIcon({ html: svg, className: "", iconSize: [40, 40], iconAnchor: [20, 20] });
+  return L.divIcon({ html: svg, className: "", iconSize: [40,40], iconAnchor: [20,20] });
 }
 
-// ─── Auto-fit map bounds when hospitals change ───────────────────────────────
-function FitBounds({ hospitals }) {
+// Re-center map whenever userLocation changes
+function RecenterMap({ userLocation, hospitals }) {
   const map = useMap();
   useEffect(() => {
-    if (!hospitals.length) return;
-    const bounds = hospitals.map((h) => [h.lat, h.lng]);
-    bounds.push([EMERGENCY_LOCATION.lat, EMERGENCY_LOCATION.lng]);
-    map.fitBounds(bounds, { padding: [40, 40] });
-  }, []);
+    if (!userLocation) return;
+    const points = hospitals.map(h => [h.lat, h.lng]);
+    points.push([userLocation.lat, userLocation.lng]);
+    if (points.length > 1) {
+      map.fitBounds(points, { padding: [40, 40] });
+    } else {
+      map.setView([userLocation.lat, userLocation.lng], 13);
+    }
+  }, [userLocation]);
   return null;
 }
 
-// ─── MapComponent ────────────────────────────────────────────────────────────
-export default function MapComponent({ hospitals, routeLine, selectedHospitalId }) {
+export default function MapComponent({ hospitals, routeLine, selectedHospitalId, userLocation }) {
+  const center = userLocation
+    ? [userLocation.lat, userLocation.lng]
+    : [26.9124, 75.7873]; // Jaipur fallback
+
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-slate-700/60 shadow-2xl">
-      {/* Scanline overlay for "command center" aesthetic */}
-      <div
-        className="pointer-events-none absolute inset-0 z-[1000] opacity-[0.03]"
-        style={{
-          backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,0.5) 2px, rgba(255,255,255,0.5) 4px)",
-        }}
-      />
+      <div className="pointer-events-none absolute inset-0 z-[1000] opacity-[0.03]"
+        style={{ backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.5) 2px,rgba(255,255,255,0.5) 4px)" }} />
 
-      <MapContainer
-        center={[EMERGENCY_LOCATION.lat, EMERGENCY_LOCATION.lng]}
-        zoom={12}
-        style={{ height: "100%", width: "100%", background: "#0f172a" }}
-        zoomControl={false}
-      >
+      <MapContainer center={center} zoom={12}
+        style={{ height: "100%", width: "100%", background: "#0f172a" }} zoomControl={false}>
+
         <TileLayer
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
         />
-        <FitBounds hospitals={hospitals} />
+        <RecenterMap userLocation={userLocation} hospitals={hospitals} />
 
-        {/* Emergency location marker */}
-        <Marker
-          position={[EMERGENCY_LOCATION.lat, EMERGENCY_LOCATION.lng]}
-          icon={createEmergencyIcon()}
-        >
-          <Popup className="pulse-popup">
-            <div className="text-xs font-mono bg-slate-900 text-red-400 p-2 rounded">
-              <div className="font-bold text-red-300 mb-1">🚨 EMERGENCY ORIGIN</div>
-              <div>Times Square, Manhattan</div>
-              <div className="text-slate-400 mt-1">
-                {EMERGENCY_LOCATION.lat.toFixed(4)}°N, {Math.abs(EMERGENCY_LOCATION.lng).toFixed(4)}°W
+        {/* User / emergency origin marker */}
+        {userLocation && (
+          <Marker position={[userLocation.lat, userLocation.lng]} icon={createUserIcon()}>
+            <Popup>
+              <div className="text-xs font-mono bg-slate-900 text-red-400 p-2 rounded">
+                <div className="font-bold text-red-300 mb-1">🚨 YOUR LOCATION</div>
+                <div className="text-slate-400">{userLocation.lat.toFixed(5)}°N, {userLocation.lng.toFixed(5)}°E</div>
               </div>
-            </div>
-          </Popup>
-        </Marker>
+            </Popup>
+          </Marker>
+        )}
 
         {/* Hospital markers */}
-        {hospitals.map((h) => {
+        {hospitals.map(h => {
           const tier = getOccupancyTier(h);
           const isSelected = h.id === selectedHospitalId;
           const available = h.totalBeds - h.occupiedBeds;
           const occupancyPct = Math.round((h.occupiedBeds / h.totalBeds) * 100);
-          const dist = getDistanceKm(EMERGENCY_LOCATION.lat, EMERGENCY_LOCATION.lng, h.lat, h.lng);
+          const dist = userLocation
+            ? getDistanceKm(userLocation.lat, userLocation.lng, h.lat, h.lng)
+            : null;
 
           return (
-            <Marker
-              key={h.id}
-              position={[h.lat, h.lng]}
-              icon={createHospitalIcon(tier, isSelected)}
-            >
+            <Marker key={h.id} position={[h.lat, h.lng]} icon={createHospitalIcon(tier, isSelected)}>
               <Popup>
                 <div className="text-xs font-mono bg-slate-900 text-slate-100 p-2 rounded min-w-[180px]">
                   <div className="font-bold text-white mb-2 text-sm">{h.name}</div>
@@ -129,12 +114,10 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId 
                       {available} / {h.totalBeds}
                     </span>
                     <span className="text-slate-500">Occupancy</span>
-                    <span className={
-                      occupancyPct >= 90 ? "text-red-400" :
-                      occupancyPct >= 70 ? "text-yellow-400" : "text-green-400"
-                    }>{occupancyPct}%</span>
-                    <span className="text-slate-500">Distance</span>
-                    <span>{dist.toFixed(1)} km</span>
+                    <span className={occupancyPct >= 90 ? "text-red-400" : occupancyPct >= 70 ? "text-yellow-400" : "text-green-400"}>
+                      {occupancyPct}%
+                    </span>
+                    {dist !== null && <><span className="text-slate-500">Distance</span><span>{dist.toFixed(1)} km</span></>}
                     <span className="text-slate-500">Ventilators</span>
                     <span className={h.hasVentilators ? "text-green-400" : "text-slate-500"}>
                       {h.hasVentilators ? "✓ Yes" : "✗ No"}
@@ -150,18 +133,13 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId 
         })}
 
         {/* Route polyline */}
-        {routeLine && (
+        {routeLine && userLocation && (
           <Polyline
             positions={[
-              [EMERGENCY_LOCATION.lat, EMERGENCY_LOCATION.lng],
+              [userLocation.lat, userLocation.lng],
               [routeLine.lat, routeLine.lng],
             ]}
-            pathOptions={{
-              color: "#38bdf8",
-              weight: 3,
-              opacity: 0.9,
-              dashArray: "8 6",
-            }}
+            pathOptions={{ color: "#38bdf8", weight: 3, opacity: 0.9, dashArray: "8 6" }}
           />
         )}
       </MapContainer>
