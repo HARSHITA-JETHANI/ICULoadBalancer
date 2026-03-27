@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { getOccupancyTier, getDistanceKm } from "./utils";
@@ -84,6 +84,7 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
         {/* User / emergency origin marker */}
         {userLocation && (
           <Marker position={[userLocation.lat, userLocation.lng]} icon={createUserIcon()}>
+            <Tooltip permanent direction="bottom" className="map-label origin-label">Origin: Your Location</Tooltip>
             <Popup>
               <div className="text-xs font-mono bg-slate-900 text-red-400 p-2 rounded">
                 <div className="font-bold text-red-300 mb-1">🚨 YOUR LOCATION</div>
@@ -96,7 +97,7 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
         {/* Hospital markers */}
         {hospitals.map(h => {
           const tier = getOccupancyTier(h);
-          const isSelected = h.id === selectedHospitalId;
+          const isSelected = h._id === selectedHospitalId;
           const available = h.totalBeds - h.occupiedBeds;
           const occupancyPct = Math.round((h.occupiedBeds / h.totalBeds) * 100);
           const dist = userLocation
@@ -104,7 +105,10 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
             : null;
 
           return (
-            <Marker key={h.id} position={[h.lat, h.lng]} icon={createHospitalIcon(tier, isSelected)}>
+            <Marker key={h._id} position={[h.lat, h.lng]} icon={createHospitalIcon(tier, isSelected)}>
+              {isSelected && (
+                <Tooltip permanent direction="bottom" className="map-label dest-label">Destination: {h.name}</Tooltip>
+              )}
               <Popup>
                 <div className="text-xs font-mono bg-slate-900 text-slate-100 p-2 rounded min-w-[180px]">
                   <div className="font-bold text-white mb-2 text-sm">{h.name}</div>
