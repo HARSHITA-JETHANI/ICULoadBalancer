@@ -18,11 +18,6 @@ const io = new Server(httpServer, {
 app.use(cors());
 app.use(express.json());
 
-// ─── MongoDB Connection ──────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ MongoDB Connected"))
-  .catch(err => console.error("❌ MongoDB Connection Error:", err));
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function broadcastUpdate() {
   const allHospitals = await Hospital.find({});
@@ -72,8 +67,18 @@ io.on("connection", async (socket) => {
   });
 });
 
-// ─── Start ────────────────────────────────────────────────────────────────────
+// ─── MongoDB Connection & Server Start ───────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`\n🚑 PulseRoute backend running on port ${PORT}`);
-});
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("✅ MongoDB Connected Successfully");
+    // Only start the server AFTER the database is connected!
+    httpServer.listen(PORT, () => {
+      console.log(`\n🚑 PulseRoute backend running on port ${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error("❌ MongoDB Connection Error:", err.message);
+    console.log("👉 Did you forget to start the MongoDB service on your computer?");
+  });

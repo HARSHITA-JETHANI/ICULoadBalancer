@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Activity, AlertTriangle, Wind, ChevronRight,
   Ambulance, CheckCircle, Clock, Wifi
@@ -47,19 +47,36 @@ function ScoreRing({ score, rank }) {
   );
 }
 
-export default function Dashboard({ hospitals, userLocation, onDispatch }) {
+export default function Dashboard({ hospitals, userLocation, onDispatch, hospitalVersion }) {
   const [severity, setSeverity] = useState(5);
   const [needsVent, setNeedsVent] = useState(false);
   const [results, setResults]   = useState(null);
   const [dispatched, setDispatched] = useState(null);
 
+  // Keep refs so the auto-recompute effect always uses the latest intake values
+  const severityRef = useRef(severity);
+  const needsVentRef = useRef(needsVent);
+  severityRef.current = severity;
+  needsVentRef.current = needsVent;
+
   function handleCalculate() {
     const scored = hospitals
-      .map(h => ({ ...h, score: calculateHospitalScore(h, needsVent, userLocation) }))
+      .map(h => ({ ...h, score: calculateHospitalScore(h, needsVent, userLocation, severity) }))
       .sort((a, b) => a.score - b.score);
     setResults(scored);
     setDispatched(null);
   }
+
+  // ─── Auto-recompute results when hospital data changes via socket ──────────
+  useEffect(() => {
+    // Only recompute if results have already been calculated once
+    if (!results) return;
+    const scored = hospitals
+      .map(h => ({ ...h, score: calculateHospitalScore(h, needsVentRef.current, userLocation, severityRef.current) }))
+      .sort((a, b) => a.score - b.score);
+    setResults(scored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hospitalVersion]);
 
   function handleDispatch(hospital) {
     onDispatch(hospital);
@@ -185,8 +202,8 @@ export default function Dashboard({ hospitals, userLocation, onDispatch }) {
                         <span>·</span>
                         <span>{occupancyPct}% full</span>
                         <span>·</span>
-                        <span className={available === 0 ? "text-red-400" : "text-slate-400"}>
-                          {available} bed{available !== 1 ? "s" : ""} free
+                        <span className={`font-bold ${available === 0 ? "text-red-400" : available <= 5 ? "text-amber-400" : "text-green-400"}`}>
+                          🛏 {available} bed{available !== 1 ? "s" : ""} free
                         </span>
                         {h.hasVentilators && <><span>·</span><Wind size={9} className="text-sky-400" /></>}
                       </div>

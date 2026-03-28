@@ -1,7 +1,12 @@
-import { useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, Tooltip } from "react-leaflet";
+import { useEffect, useRef } from "react";
+import { MapContainer, TileLayer, Marker, Popup, useMap, Tooltip } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+
+// MUST come AFTER the imports above!
+import "leaflet-routing-machine";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
+
 import { getOccupancyTier, getDistanceKm } from "./utils";
 
 delete L.Icon.Default.prototype._getIconUrl;
@@ -62,6 +67,50 @@ function RecenterMap({ userLocation, hospitals }) {
   return null;
 }
 
+// ─── Actual Road Routing Component ───────────────────────────────────────────
+function RoadRouter({ origin, destination }) {
+  const map = useMap();
+  const routingControlRef = useRef(null);
+
+  useEffect(() => {
+    if (!origin || !destination) return;
+
+    // If the route doesn't exist yet, create it
+    if (!routingControlRef.current) {
+      routingControlRef.current = L.Routing.control({
+        waypoints: [
+          L.latLng(origin.lat, origin.lng),
+          L.latLng(destination.lat, destination.lng)
+        ],
+        lineOptions: {
+          styles: [{ color: '#38bdf8', weight: 4, opacity: 0.9, dashArray: '10 10' }]
+        },
+        show: false,          // Hides the clunky text-directions box
+        addWaypoints: false,  // Prevents users from dragging the line mid-route
+        routeWhileDragging: false,
+        fitSelectedRoutes: false, // Prevents map from wildly zooming on every tiny GPS update
+        createMarker: () => null  // Hides default markers so we can use your custom ones!
+      }).addTo(map);
+    } else {
+      // If the route already exists, just update the start point as the ambulance moves!
+      routingControlRef.current.setWaypoints([
+        L.latLng(origin.lat, origin.lng),
+        L.latLng(destination.lat, destination.lng)
+      ]);
+    }
+
+    // Cleanup when component unmounts
+    return () => {
+      if (routingControlRef.current && map) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
+    };
+  }, [origin, destination, map]);
+
+  return null;
+}
+
 export default function MapComponent({ hospitals, routeLine, selectedHospitalId, userLocation }) {
   const center = userLocation
     ? [userLocation.lat, userLocation.lng]
@@ -81,18 +130,6 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
         />
         <RecenterMap userLocation={userLocation} hospitals={hospitals} />
 
-        {/* User / emergency origin marker */}
-        {userLocation && (
-          <Marker position={[userLocation.lat, userLocation.lng]} icon={createUserIcon()}>
-            <Tooltip permanent direction="bottom" className="map-label origin-label">Origin: Your Location</Tooltip>
-            <Popup>
-              <div className="text-xs font-mono bg-slate-900 text-red-400 p-2 rounded">
-                <div className="font-bold text-red-300 mb-1">🚨 YOUR LOCATION</div>
-                <div className="text-slate-400">{userLocation.lat.toFixed(5)}°N, {userLocation.lng.toFixed(5)}°E</div>
-              </div>
-            </Popup>
-          </Marker>
-        )}
 
         {/* Hospital markers */}
         {hospitals.map(h => {
@@ -136,15 +173,22 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
           );
         })}
 
-        {/* Route polyline */}
+        {/* Draw the actual road network path */}
         {routeLine && userLocation && (
-          <Polyline
-            positions={[
-              [userLocation.lat, userLocation.lng],
-              [routeLine.lat, routeLine.lng],
-            ]}
-            pathOptions={{ color: "#38bdf8", weight: 3, opacity: 0.9, dashArray: "8 6" }}
-          />
+          <RoadRouter origin={userLocation} destination={routeLine} />
+        )}
+
+        {/* User / emergency origin marker — rendered AFTER RoadRouter so it stays on top */}
+        {userLocation && (
+          <Marker position={[userLocation.lat, userLocation.lng]} icon={createUserIcon()} zIndexOffset={1000}>
+            <Tooltip permanent direction="bottom" className="map-label origin-label">Origin: Your Location</Tooltip>
+            <Popup>
+              <div className="text-xs font-mono bg-slate-900 text-red-400 p-2 rounded">
+                <div className="font-bold text-red-300 mb-1">🚨 YOUR LOCATION</div>
+                <div className="text-slate-400">{userLocation.lat.toFixed(5)}°N, {userLocation.lng.toFixed(5)}°E</div>
+              </div>
+            </Popup>
+          </Marker>
         )}
       </MapContainer>
     </div>
