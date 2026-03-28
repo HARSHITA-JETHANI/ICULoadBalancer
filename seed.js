@@ -15,7 +15,8 @@ const mockHospitals = [
 
 async function seedDB() {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    // Temporarily hardcode this just for the upload!
+await mongoose.connect('mongodb+srv://admin:admin@cluster0.prx4ni8.mongodb.net/');
     console.log("✅ Connected to MongoDB");
 
     await Hospital.deleteMany({});
