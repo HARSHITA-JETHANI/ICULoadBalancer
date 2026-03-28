@@ -63,7 +63,7 @@ export default function Dashboard({ hospitals, userLocation, onDispatch }) {
 
   function handleDispatch(hospital) {
     onDispatch(hospital);
-    setDispatched(hospital.id);
+    setDispatched(hospital._id);
   }
 
   const severityColor = severity <= 3 ? "text-green-400" : severity <= 6 ? "text-yellow-400" : "text-red-400";
@@ -151,7 +151,7 @@ export default function Dashboard({ hospitals, userLocation, onDispatch }) {
           <div className="space-y-2">
             {results.map((h, idx) => {
               const isDisqualified = !isFinite(h.score);
-              const isDispatched   = dispatched === h.id;
+              const isDispatched   = dispatched === h._id;
               const tier = getOccupancyTier(h);
               const available = h.totalBeds - h.occupiedBeds;
               const dist = userLocation
@@ -160,7 +160,7 @@ export default function Dashboard({ hospitals, userLocation, onDispatch }) {
               const occupancyPct = Math.round((h.occupiedBeds / h.totalBeds) * 100);
 
               return (
-                <div key={h.id}
+                <div key={h._id}
                   className={`rounded-lg border p-3 transition-all duration-300 ${
                     isDispatched    ? "border-sky-500/60 bg-sky-500/10"
                     : isDisqualified ? "border-slate-700/30 bg-slate-900/40 opacity-50"
