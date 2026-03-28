@@ -20,18 +20,33 @@ export function getOccupancyTier(hospital) {
 }
 
 // ─── Routing Score ────────────────────────────────────────────────────────────
-// userLocation: { lat, lng } — comes from device GPS via App.jsx
-// Returns Infinity if hospital is disqualified (full or missing ventilator).
-export function calculateHospitalScore(hospital, patientNeedsVentilator, userLocation) {
+// Dynamic Criticality Routing: severity (1–10) shifts weight between
+// proximity and bed capacity.
+//   - Critical (≥8): 90% distance weight → get them to the closest hospital NOW
+//   - Moderate (4-7): balanced 60/40
+//   - Stable (≤3):  30% distance weight → prioritize hospitals with most free beds
+//
+// Distance is normalized against MAX_RANGE_KM so both factors operate on a
+// comparable 0–1 scale.  This prevents the raw km value from drowning out
+// occupancy in the score.
+const MAX_RANGE_KM = 30; // Jaipur metro radius — normalises distance to 0-1
+
+export function calculateHospitalScore(hospital, patientNeedsVentilator, userLocation, severity = 5) {
   if (hospital.occupiedBeds >= hospital.totalBeds) return Infinity;
   if (patientNeedsVentilator && !hospital.hasVentilators) return Infinity;
 
-  // If userLocation not yet available, fall back to Jaipur city centre
   const origin = userLocation ?? { lat: 26.9124, lng: 75.7873 };
+  const distanceKm = getDistanceKm(origin.lat, origin.lng, hospital.lat, hospital.lng);
 
-  const distance = getDistanceKm(origin.lat, origin.lng, hospital.lat, hospital.lng);
+  // Normalise both factors to 0–1
+  const distanceNorm   = Math.min(distanceKm / MAX_RANGE_KM, 1);
   const occupancyRatio = hospital.occupiedBeds / hospital.totalBeds;
 
-  // Lower score = better: 60% weight on distance, 40% on occupancy
-  return distance * 0.6 + occupancyRatio * 0.4;
+  // Dynamic weighting based on severity (1-10)
+  let distWeight;
+  if (severity >= 8)      distWeight = 0.9;  // CRITICAL — nearest hospital wins
+  else if (severity >= 4) distWeight = 0.6;  // MODERATE — balanced
+  else                    distWeight = 0.3;  // STABLE   — emptiest hospital wins
+
+  return (distanceNorm * distWeight) + (occupancyRatio * (1 - distWeight));
 }

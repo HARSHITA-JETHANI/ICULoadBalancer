@@ -76,10 +76,8 @@ export default function App() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }
 
-  // ── Bootstrap: geolocation → fetch hospitals → connect socket
+  // ── Bootstrap: fetch hospitals → connect socket
   useEffect(() => {
-    const JAIPUR_FALLBACK = { lat: 26.9124, lng: 75.7873 };
-
     function bootstrap(loc) {
       setUserLocation(loc);
       setLoadingStatus("Connecting to hospital network…");
@@ -97,24 +95,25 @@ export default function App() {
       socket.on("hospitalsUpdated", fresh => setHospitals(fresh));
     }
 
-    if (!navigator.geolocation) {
-      bootstrap(JAIPUR_FALLBACK);
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      pos => bootstrap({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      ()  => bootstrap(JAIPUR_FALLBACK),
-      { timeout: 8000 }
-    );
+    // 🛡️ HACKATHON FIX: Force location to campus and completely bypass browser GPS
+    const DAHMI_KALAN_CAMPUS = { lat: 26.8429, lng: 75.5654 };
+    bootstrap(DAHMI_KALAN_CAMPUS);
 
     return () => socket.disconnect();
   }, []);
 
   // ── Dispatch → POST, socket broadcast updates state everywhere
   const handleDispatch = useCallback(async (hospital) => {
+    // 1. Instantly draw the route line
     setRouteLine({ lat: hospital.lat, lng: hospital.lng });
-    setSelectedId(hospital.id);
+    setSelectedId(hospital._id);
+    
+    // 2. Optimistic UI Update: Instantly add a patient to the bed count so it doesn't lag
+    setHospitals(prev => prev.map(h => 
+      h._id === hospital._id ? { ...h, occupiedBeds: h.occupiedBeds + 1 } : h
+    ));
+
+    // 3. Talk to the backend
     try {
       const res  = await fetch(`${BACKEND_URL}/api/dispatch`, {
         method: "POST",
@@ -126,6 +125,11 @@ export default function App() {
       addToast(`🚑 Ambulance routed to ${hospital.name}`, "success");
     } catch (err) {
       addToast(`✗ ${err.message}`, "error");
+      
+      // If dispatch fails, revert the optimistic bed update
+      setHospitals(prev => prev.map(h => 
+        h._id === hospital._id ? { ...h, occupiedBeds: h.occupiedBeds - 1 } : h
+      ));
     }
   }, []);
 

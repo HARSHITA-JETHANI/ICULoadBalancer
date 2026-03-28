@@ -1,4 +1,4 @@
-// server.js
+
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 // ─── MongoDB Connection ──────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect('mongodb://localhost:27017/PulseRoute/PulseRoute')
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.error("❌ MongoDB Connection Error:", err));
 
