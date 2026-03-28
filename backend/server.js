@@ -105,6 +105,7 @@ const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB Connected Successfully");
+    // Only start the server AFTER the database is connected!
     httpServer.listen(PORT, () => {
       console.log(`\n🚑 PulseRoute backend running on port ${PORT}`);
     });

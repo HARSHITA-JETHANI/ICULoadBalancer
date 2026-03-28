@@ -54,4 +54,22 @@ export function calculateHospitalScore(hospital, patientNeedsVentilator, userLoc
 
   // Lower score = better
   return (distanceNorm * distWeight) + (occupancyRatio * (1 - distWeight));
+  // Dynamic weighting based on patient severity
+  let wDist, wOcc;
+  if (severity >= 8) {
+    // High severity — time-critical, prioritise closest hospital
+    wDist = 0.8;
+    wOcc  = 0.2;
+  } else if (severity >= 4) {
+    // Medium severity — standard balance
+    wDist = 0.6;
+    wOcc  = 0.4;
+  } else {
+    // Low severity — patient is stable, save beds at busy trauma centres
+    wDist = 0.3;
+    wOcc  = 0.7;
+  }
+
+  // Lower score = better
+  return distance * wDist + occupancyRatio * wOcc;
 }
