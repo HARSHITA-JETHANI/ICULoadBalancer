@@ -21,8 +21,9 @@ export function getOccupancyTier(hospital) {
 
 // ─── Routing Score ────────────────────────────────────────────────────────────
 // userLocation: { lat, lng } — comes from device GPS via App.jsx
+// severity:     1–10  — drives dynamic weight selection
 // Returns Infinity if hospital is disqualified (full or missing ventilator).
-export function calculateHospitalScore(hospital, patientNeedsVentilator, userLocation) {
+export function calculateHospitalScore(hospital, patientNeedsVentilator, userLocation, severity = 5) {
   if (hospital.occupiedBeds >= hospital.totalBeds) return Infinity;
   if (patientNeedsVentilator && !hospital.hasVentilators) return Infinity;
 
@@ -32,6 +33,22 @@ export function calculateHospitalScore(hospital, patientNeedsVentilator, userLoc
   const distance = getDistanceKm(origin.lat, origin.lng, hospital.lat, hospital.lng);
   const occupancyRatio = hospital.occupiedBeds / hospital.totalBeds;
 
-  // Lower score = better: 60% weight on distance, 40% on occupancy
-  return distance * 0.6 + occupancyRatio * 0.4;
+  // Dynamic weighting based on patient severity
+  let wDist, wOcc;
+  if (severity >= 8) {
+    // High severity — time-critical, prioritise closest hospital
+    wDist = 0.8;
+    wOcc  = 0.2;
+  } else if (severity >= 4) {
+    // Medium severity — standard balance
+    wDist = 0.6;
+    wOcc  = 0.4;
+  } else {
+    // Low severity — patient is stable, save beds at busy trauma centres
+    wDist = 0.3;
+    wOcc  = 0.7;
+  }
+
+  // Lower score = better
+  return distance * wDist + occupancyRatio * wOcc;
 }
