@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react";
 import {
   Activity, AlertTriangle, Wind, ChevronRight,
-  Ambulance, CheckCircle, Clock, Wifi
+  Ambulance, CheckCircle, Clock, Wifi, Map
 } from "lucide-react";
-import { calculateHospitalScore, getOccupancyTier, getDistanceKm } from "./utils";
+import { calculateHospitalScore, getOccupancyTier } from "./utils";
 
 function TierBadge({ tier }) {
   const cfg = {
@@ -31,7 +31,7 @@ function OccupancyBar({ hospital }) {
 
 function ScoreRing({ score, rank }) {
   if (!isFinite(score)) return null;
-  const normalized = Math.max(0, 1 - score / 20);
+  const normalized = Math.max(0, 1 - score); // scores are 0–1 after normalization fix
   const colors = ["#f59e0b", "#94a3b8", "#cd7c2f"];
   const ringColor = rank < 3 ? colors[rank] : "#475569";
   return (
@@ -60,6 +60,7 @@ export default function Dashboard({ hospitals, userLocation, onDispatch, hospita
   needsVentRef.current = needsVent;
 
   function handleCalculate() {
+    // UPDATED: Now passing severity into the scoring algorithm
     const scored = hospitals
       .map(h => ({ ...h, score: calculateHospitalScore(h, needsVent, userLocation, severity) }))
       .sort((a, b) => a.score - b.score);
@@ -171,10 +172,11 @@ export default function Dashboard({ hospitals, userLocation, onDispatch, hospita
               const isDispatched   = dispatched === h._id;
               const tier = getOccupancyTier(h);
               const available = h.totalBeds - h.occupiedBeds;
-              const dist = userLocation
-                ? getDistanceKm(userLocation.lat, userLocation.lng, h.lat, h.lng)
-                : null;
               const occupancyPct = Math.round((h.occupiedBeds / h.totalBeds) * 100);
+
+              // Fallback location if user hasn't allowed GPS (Default: Jaipur center)
+              const originLat = userLocation?.lat || 26.9124;
+              const originLng = userLocation?.lng || 75.7873;
 
               return (
                 <div key={h._id}
@@ -198,8 +200,6 @@ export default function Dashboard({ hospitals, userLocation, onDispatch, hospita
                         <TierBadge tier={tier} />
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500 font-mono flex-wrap">
-                        {dist !== null && <span>{dist.toFixed(1)} km</span>}
-                        <span>·</span>
                         <span>{occupancyPct}% full</span>
                         <span>·</span>
                         <span className={`font-bold ${available === 0 ? "text-red-400" : available <= 5 ? "text-amber-400" : "text-green-400"}`}>
@@ -213,20 +213,30 @@ export default function Dashboard({ hospitals, userLocation, onDispatch, hospita
                   <OccupancyBar hospital={h} />
 
                   {!isDisqualified && (
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <div className="text-[10px] text-slate-500 font-mono">
-                        {dist !== null ? `ETA ~${Math.round(dist / 0.5 + 2)} min` : ""}
+                    <div className="mt-2.5 flex items-center justify-end">
+                      
+                      {/* NEW BUTTONS LAYOUT */}
+                      <div className="flex items-center gap-2">
+                        <a 
+                          href={`https://www.google.com/maps/dir/?api=1&origin=${originLat},${originLng}&destination=${h.lat},${h.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-md bg-sky-500/10 text-sky-400 border border-sky-500/30 hover:bg-sky-500/20 transition-all active:scale-95"
+                        >
+                          <Map size={11} /> NAVIGATE
+                        </a>
+
+                        {isDispatched ? (
+                          <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-bold px-3 py-1.5">
+                            <CheckCircle size={13} />DISPATCHED
+                          </div>
+                        ) : (
+                          <button onClick={() => handleDispatch(h)} disabled={!!dispatched}
+                            className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95">
+                            <Ambulance size={11} />DISPATCH
+                          </button>
+                        )}
                       </div>
-                      {isDispatched ? (
-                        <div className="flex items-center gap-1.5 text-[11px] text-sky-400 font-bold">
-                          <CheckCircle size={13} />DISPATCHED
-                        </div>
-                      ) : (
-                        <button onClick={() => handleDispatch(h)} disabled={!!dispatched}
-                          className="flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95">
-                          <Ambulance size={11} />DISPATCH<ChevronRight size={10} />
-                        </button>
-                      )}
                     </div>
                   )}
 

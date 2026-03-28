@@ -1,7 +1,7 @@
 // seed.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
-import Hospital from "./models/Hospital.js";
+import Hospital from "./backend/models/Hospital.js";
 
 dotenv.config();
 

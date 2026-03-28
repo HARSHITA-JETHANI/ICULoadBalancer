@@ -12,7 +12,7 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: { origin: "*", methods: ["GET", "POST", "PUT"] },
 });
 
 app.use(cors());
@@ -25,6 +25,8 @@ async function broadcastUpdate() {
 }
 
 // ─── REST Routes ─────────────────────────────────────────────────────────────
+
+// GET  /api/hospitals — return all hospitals
 app.get("/api/hospitals", async (req, res) => {
   try {
     const hospitals = await Hospital.find({});
@@ -34,6 +36,27 @@ app.get("/api/hospitals", async (req, res) => {
   }
 });
 
+// PUT  /api/hospitals/:id — admin updates bed counts / ventilator
+app.put("/api/hospitals/:id", async (req, res) => {
+  try {
+    const { totalBeds, occupiedBeds, hasVentilators } = req.body;
+    const hospital = await Hospital.findById(req.params.id);
+    if (!hospital) return res.status(404).json({ error: "Hospital not found" });
+
+    // Only update fields that were actually sent
+    if (totalBeds !== undefined)      hospital.totalBeds = totalBeds;
+    if (occupiedBeds !== undefined)   hospital.occupiedBeds = occupiedBeds;
+    if (hasVentilators !== undefined) hospital.hasVentilators = hasVentilators;
+
+    await hospital.save();
+    await broadcastUpdate();          // Instantly refresh all Dispatch maps
+    res.json({ success: true, hospital });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update hospital" });
+  }
+});
+
+// POST /api/dispatch — dispatch an ambulance, increment bed, alert admin
 app.post("/api/dispatch", async (req, res) => {
   const { hospitalId } = req.body;
   if (!hospitalId) return res.status(400).json({ error: "hospitalId is required" });
@@ -49,7 +72,16 @@ app.post("/api/dispatch", async (req, res) => {
     hospital.occupiedBeds += 1;
     await hospital.save();
 
-    broadcastUpdate(); // Alert all connected clients
+    // Broadcast updated bed counts to all dispatch clients
+    await broadcastUpdate();
+
+    // Alert the specific hospital's admin portal
+    io.emit("incomingPatient", {
+      hospitalId: hospital._id,
+      hospitalName: hospital.name,
+      timestamp: new Date(),
+    });
+
     res.json({ success: true, hospital });
   } catch (err) {
     res.status(500).json({ error: "Server error during dispatch" });
@@ -73,7 +105,6 @@ const PORT = process.env.PORT || 3000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB Connected Successfully");
-    // Only start the server AFTER the database is connected!
     httpServer.listen(PORT, () => {
       console.log(`\n🚑 PulseRoute backend running on port ${PORT}`);
     });
