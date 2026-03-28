@@ -34,16 +34,6 @@ function Toast({ message, type = "success", onDismiss }) {
   );
 }
 
-// ─── Stat Pill ───────────────────────────────────────────────────────────────
-function StatPill({ label, value, accent }) {
-  return (
-    <div className="flex items-center gap-2 bg-slate-800/80 border border-slate-700/50 rounded-lg px-3 py-2">
-      <div className={`text-lg font-black font-mono ${accent}`}>{value}</div>
-      <div className="text-[9px] text-slate-500 tracking-widest uppercase leading-tight">{label}</div>
-    </div>
-  );
-}
-
 // ─── Loading Screen ───────────────────────────────────────────────────────────
 function LoadingScreen({ status }) {
   return (
@@ -70,15 +60,14 @@ function LoadingScreen({ status }) {
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [hospitals, setHospitals]           = useState([]);
-  const [userLocation, setUserLocation]     = useState(null);
-  const [loadingStatus, setLoadingStatus]   = useState("Detecting your location…");
-  const [ready, setReady]                   = useState(false);
+  const [hospitals, setHospitals]             = useState([]);
+  const [userLocation, setUserLocation]       = useState(null);
+  const [loadingStatus, setLoadingStatus]     = useState("Detecting your location…");
+  const [ready, setReady]                     = useState(false);
   const [socketConnected, setSocketConnected] = useState(false);
-  const [routeLine, setRouteLine]           = useState(null);
-  const [selectedId, setSelectedId]         = useState(null);
-  const [toasts, setToasts]                 = useState([]);
-  const [surging, setSurging]               = useState(false);
+  const [routeLine, setRouteLine]             = useState(null);
+  const [selectedId, setSelectedId]           = useState(null);
+  const [toasts, setToasts]                   = useState([]);
 
   function addToast(message, type = "success") {
     setToasts(prev => [...prev, { id: Date.now() + Math.random(), message, type }]);
@@ -130,7 +119,7 @@ export default function App() {
       const res  = await fetch(`${BACKEND_URL}/api/dispatch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hospitalId: hospital.id }),
+        body: JSON.stringify({ hospitalId: hospital._id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Dispatch failed");
@@ -139,29 +128,6 @@ export default function App() {
       addToast(`✗ ${err.message}`, "error");
     }
   }, []);
-
-  // ── Surge → POST
-  async function handleSurge() {
-    setSurging(true);
-    try {
-      const res  = await fetch(`${BACKEND_URL}/api/surge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error("Surge failed");
-      addToast(`⚠ MCI simulated — surged: ${data.surgedHospitals.join(", ")}`, "warning");
-    } catch (err) {
-      addToast(`✗ ${err.message}`, "error");
-    }
-    setTimeout(() => setSurging(false), 1500);
-  }
-
-  // ── Derived
-  const totalBeds     = hospitals.reduce((s, h) => s + h.totalBeds, 0);
-  const occupiedBeds  = hospitals.reduce((s, h) => s + h.occupiedBeds, 0);
-  const availableBeds = totalBeds - occupiedBeds;
-  const criticalCount = hospitals.filter(h => h.occupiedBeds / h.totalBeds >= 0.9).length;
 
   if (!ready) return <LoadingScreen status={loadingStatus} />;
 
@@ -177,12 +143,34 @@ export default function App() {
         .leaflet-popup-content-wrapper { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
         .leaflet-popup-tip-container { display: none; }
         .leaflet-popup-content { margin: 0 !important; }
+        
+        /* Permanent Map Label Tooltips */
+        .leaflet-tooltip.map-label {
+          background-color: #0f172a;
+          border: 1px solid #334155;
+          font-family: 'IBM Plex Mono', monospace;
+          font-weight: 600;
+          font-size: 11px;
+          padding: 4px 8px;
+          border-radius: 6px;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        }
+        .leaflet-tooltip.origin-label {
+          color: #f87171;
+          border-color: #7f1d1d;
+        }
+        .leaflet-tooltip.dest-label {
+          color: #38bdf8;
+          border-color: #0c4a6e;
+        }
+        .leaflet-tooltip-bottom.map-label::before {
+          border-bottom-color: #334155;
+        }
+
         input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: white; cursor: pointer; box-shadow: 0 0 0 3px rgba(14,165,233,0.4); }
         ::-webkit-scrollbar { width: 4px; } ::-webkit-scrollbar-track { background: #0f172a; } ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
         @keyframes slide-in { from { transform: translateX(100%) scale(0.95); opacity:0; } to { transform:translateX(0) scale(1); opacity:1; } }
         .animate-slide-in { animation: slide-in 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards; }
-        @keyframes surge-flash { 0%,100%{opacity:1} 50%{opacity:0.4} }
-        .surge-active { animation: surge-flash 0.4s ease-in-out 3; }
       `}</style>
 
       {/* ── Header ── */}
@@ -211,33 +199,11 @@ export default function App() {
         </div>
 
         {userLocation && (
-          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-500 font-mono">
+          <div className="hidden sm:flex items-center gap-1.5 text-[10px] text-slate-500 font-mono ml-auto">
             <MapPin size={10} className="text-sky-500" />
             {userLocation.lat.toFixed(4)}°N · {Math.abs(userLocation.lng).toFixed(4)}°E
           </div>
         )}
-
-        <div className="flex items-center gap-2 ml-auto">
-          <StatPill label="Beds Available" value={availableBeds}
-            accent={availableBeds < 20 ? "text-red-400" : "text-green-400"} />
-          <StatPill label="Network Load"
-            value={`${totalBeds ? Math.round((occupiedBeds / totalBeds) * 100) : 0}%`}
-            accent="text-sky-400" />
-          <StatPill label="Critical" value={criticalCount}
-            accent={criticalCount > 2 ? "text-red-400" : "text-slate-300"} />
-        </div>
-
-        <button
-          onClick={handleSurge}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-bold text-xs tracking-wider transition-all active:scale-95 ml-2 ${
-            surging
-              ? "bg-red-500/30 border-red-500 text-red-300 surge-active"
-              : "bg-red-500/10 border-red-500/40 text-red-400 hover:bg-red-500/20"
-          }`}
-        >
-          <AlertTriangle size={13} />
-          SIMULATE MCI
-        </button>
       </header>
 
       {/* ── Split layout ── */}
