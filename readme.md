@@ -1,10 +1,176 @@
-To make your GitHub repository stand out to recruiters and judges, your README needs to be more than just text—it needs to be a visual technical document.Here is a "pretty" version of your README using Markdown's best formatting features, including shields/badges, a clear information hierarchy, and professional iconography.🚑 PulseRouteNext-Gen Emergency ICU Load Balancer & Smart RouterPulseRoute is a real-time, bidirectional emergency response ecosystem designed to optimize ICU bed allocation. By bridging the gap between moving ambulances and hospital administration, it ensures that every second counts when a life is on the line.🎯 The Core ProblemDuring medical emergencies, "Nearest" isn't always "Best."Trauma Centers are often overwhelmed while smaller hospitals have empty ICUs.Dispatchers lack real-time visibility into bed and ventilator availability.Hospitals receive zero warning before an ambulance pulls into the bay.💡 The PulseRoute SolutionWe built a three-tier architecture that creates a "Living Map" of a city's healthcare capacity.1. 📟 Smart Dispatcher ViewA high-tech dashboard for ambulance drivers that calculates the "Best" hospital using a dynamic algorithm. It doesn't just look at distance; it looks at Survival Probability.2. 🏥 Hospital Admin PortalA dedicated portal where staff manage their resources. Features include:One-Click Updates: Instantly sync bed counts with the city network.Emergency Alarms: A loud audible siren and flashing visual modal trigger the moment a patient is dispatched to them.3. 🧠 Dynamic Severity RoutingOur algorithm shifts its logic based on the patient's condition:Critical (Severity 8-10): Focuses 90% on Distance. Get them to a doctor now.Stable (Severity 1-3): Focuses 70% on Availability. Save the trauma center beds for the critical cases.🛠️ Technical ArchitectureLayerTechnologyFrontendReact 18, Tailwind CSS, Framer MotionMappingLeaflet.js & OpenStreetMapReal-TimeSocket.io (WebSockets)DatabaseMongoDB & MongooseBackendNode.js & ExpressIconsLucide-React🚀 Quick Start Guide1. Clone & InstallBashgit clone https://github.com/HARSHITA-JETHANI/ICULoadBalancer.git
+# 🚑 PulseRoute
+
+### *Next-Gen Emergency ICU Load Balancer & Smart Router*
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Active-success?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Backend-Node.js-green?style=for-the-badge&logo=node.js" />
+  <img src="https://img.shields.io/badge/Frontend-React-blue?style=for-the-badge&logo=react" />
+  <img src="https://img.shields.io/badge/Database-MongoDB-brightgreen?style=for-the-badge&logo=mongodb" />
+  <img src="https://img.shields.io/badge/RealTime-Socket.io-black?style=for-the-badge" />
+</p>
+
+---
+
+## 🧠 Overview
+
+**PulseRoute** is a real-time, bidirectional emergency response ecosystem designed to optimize ICU bed allocation.
+
+By intelligently connecting **ambulances 🚑** and **hospitals 🏥**, it ensures:
+
+* Faster decision-making
+* Better resource utilization
+* Increased survival probability
+
+---
+
+## 🎯 The Core Problem
+
+> ⚠️ In emergencies, *"Nearest"* ≠ *"Best"*
+
+* 🚨 Trauma centers are often overloaded
+* 📉 Smaller hospitals may have unused ICU capacity
+* 👀 No real-time visibility into resources
+* ⏳ Hospitals receive zero preparation time
+
+---
+
+## 💡 The PulseRoute Solution
+
+We built a **3-tier intelligent system** that creates a **“Living Map” of healthcare capacity**
+
+---
+
+### 📟 Smart Dispatcher Dashboard
+
+* Real-time hospital recommendations
+* Dynamic routing based on:
+
+  * Distance 📍
+  * ICU availability 🛏️
+  * Severity ⚠️
+
+---
+
+### 🏥 Hospital Admin Portal
+
+* 🔄 One-click ICU/bed updates
+* 🚨 Emergency alerts (audio + visual)
+* 📡 Live ambulance tracking
+
+---
+
+### 🧠 Dynamic Severity Routing
+
+| Severity Level     | Strategy                       |
+| ------------------ | ------------------------------ |
+| 🔴 Critical (8–10) | 90% weight on **distance**     |
+| 🟡 Moderate (4–7)  | Balanced approach              |
+| 🟢 Stable (1–3)    | 70% weight on **availability** |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer        | Technology                            |
+| ------------ | ------------------------------------- |
+| 🎨 Frontend  | React 18, Tailwind CSS, Framer Motion |
+| 🗺️ Mapping  | Leaflet.js, OpenStreetMap             |
+| ⚡ Real-Time  | Socket.io                             |
+| 🗄️ Database | MongoDB, Mongoose                     |
+| 🔧 Backend   | Node.js, Express                      |
+| 🎯 Icons     | Lucide React                          |
+
+---
+
+## 🚀 Quick Start Guide
+
+### 1️⃣ Clone the Repository
+
+```bash
+git clone https://github.com/HARSHITA-JETHANI/ICULoadBalancer.git
+cd ICULoadBalancer
 npm install
-2. Environment SetupCreate a .env file in the /backend directory:Code snippetPORT=3000
+```
+
+---
+
+### 2️⃣ Environment Setup
+
+Create a `.env` file inside `/backend`:
+
+```env
+PORT=3000
 MONGO_URI=your_mongodb_connection_string
-3. Run the SystemTerminal 1 (Backend):Bashcd backend
+```
+
+---
+
+### 3️⃣ Run the Project
+
+#### 🔹 Backend
+
+```bash
+cd backend
 node server.js
-Terminal 2 (Frontend):Bashnpm run dev
-📸 Interface PreviewTip: Upload your screenshots to a screenshots/ folder in your repo and link them here!Landing PageDispatcher MapAdmin Portal🎓 Academic ContextBuilt as a 6th Semester B.Tech Project focusing on real-time distributed systems and emergency healthcare logistics.Developed by: Hriday SethiLocation: Dahmi Kalan, Rajasthan📝 How to add this to GitHub:Copy the code above.Open your README.md file in VS Code.Replace everything with this text.Run:PowerShellgit add README.md
-git commit -m "docs: upgrade to professional pretty readme"
-git push origin main
+```
+
+#### 🔹 Frontend
+
+```bash
+npm run dev
+```
+
+---
+
+## 📸 Interface Preview
+
+> 📌 Add screenshots in `/screenshots` folder and link here
+
+* 🏠 Landing Page
+* 🗺️ Dispatcher Dashboard
+* 🏥 Admin Portal
+
+---
+
+## 🎓 Academic Context
+
+📚 Developed as a **6th Semester B.Tech Project**
+💡 Focus: *Real-Time Distributed Systems & Emergency Healthcare Logistics*
+
+---
+
+## 👨‍💻 Author
+
+**Hriday Sethi**
+📍 Dahmi Kalan, Rajasthan
+
+---
+
+## ⭐ Why This Project Stands Out
+
+* 🚀 Real-world problem solving
+* ⚡ Real-time system design
+* 🧠 Intelligent decision-making algorithm
+* 🌐 Full-stack architecture
+
+---
+
+## 📌 Future Enhancements
+
+* 🤖 AI-based demand prediction
+* 📊 Analytics dashboard for hospitals
+* 📱 Mobile app for ambulance drivers
+* 🌍 Multi-city scalability
+
+---
+
+## 📝 License
+
+This project is licensed under the **MIT License**
+
+---
+
+<p align="center">
+  ⭐ If you like this project, give it a star!
+</p>
