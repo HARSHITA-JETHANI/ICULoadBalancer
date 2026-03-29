@@ -9,17 +9,18 @@ import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 import { getOccupancyTier, getDistanceKm } from "./utils";
 
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-  shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
 const TIER_COLORS = {
-  green:  { fill: "#22c55e", ring: "#16a34a" },
+  green: { fill: "#22c55e", ring: "#16a34a" },
   yellow: { fill: "#eab308", ring: "#ca8a04" },
-  red:    { fill: "#ef4444", ring: "#dc2626" },
+  red: { fill: "#ef4444", ring: "#dc2626" },
 };
 
 function createHospitalIcon(tier, isSelected = false) {
@@ -35,7 +36,7 @@ function createHospitalIcon(tier, isSelected = false) {
       <text x="22" y="27" text-anchor="middle" font-size="14" font-weight="bold" fill="white" font-family="monospace">H</text>
       ${isSelected ? `<circle cx="22" cy="22" r="20" fill="none" stroke="white" stroke-width="2.5" stroke-dasharray="4 3"/>` : ""}
     </svg>`;
-  return L.divIcon({ html: svg, className: "", iconSize: [size, size], iconAnchor: [size/2, size/2], popupAnchor: [0, -size/2] });
+  return L.divIcon({ html: svg, className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2] });
 }
 
 function createUserIcon() {
@@ -48,7 +49,7 @@ function createUserIcon() {
       <circle cx="20" cy="20" r="10" fill="#ef4444"/>
       <text x="20" y="25" text-anchor="middle" font-size="14" font-weight="bold" fill="white">!</text>
     </svg>`;
-  return L.divIcon({ html: svg, className: "", iconSize: [40,40], iconAnchor: [20,20] });
+  return L.divIcon({ html: svg, className: "", iconSize: [40, 40], iconAnchor: [20, 20] });
 }
 
 // Re-center map whenever userLocation changes
@@ -114,7 +115,7 @@ function RoadRouter({ origin, destination }) {
 export default function MapComponent({ hospitals, routeLine, selectedHospitalId, userLocation }) {
   const center = userLocation
     ? [userLocation.lat, userLocation.lng]
-    : [26.9124, 75.7873]; // Jaipur fallback
+    : [26.8429063, 75.5654288830038]; // Jaipur fallback
 
   return (
     <div className="relative w-full h-full rounded-xl overflow-hidden border border-slate-700/60 shadow-2xl">
@@ -137,15 +138,21 @@ export default function MapComponent({ hospitals, routeLine, selectedHospitalId,
           const isSelected = h._id === selectedHospitalId;
           const available = h.totalBeds - h.occupiedBeds;
           const occupancyPct = Math.round((h.occupiedBeds / h.totalBeds) * 100);
+          const iconSize = isSelected ? 44 : 36;
           const dist = userLocation
             ? getDistanceKm(userLocation.lat, userLocation.lng, h.lat, h.lng)
             : null;
 
           return (
             <Marker key={h._id} position={[h.lat, h.lng]} icon={createHospitalIcon(tier, isSelected)}>
-              {isSelected && (
-                <Tooltip permanent direction="bottom" className="map-label dest-label">Destination: {h.name}</Tooltip>
-              )}
+              <Tooltip
+                permanent
+                direction="top"
+                offset={[0, -(iconSize / 2) - 2]}
+                className={`map-label dest-label`}
+              >
+                {h.name} — {available} beds
+              </Tooltip>
               <Popup>
                 <div className="text-xs font-mono bg-slate-900 text-slate-100 p-2 rounded min-w-[180px]">
                   <div className="font-bold text-white mb-2 text-sm">{h.name}</div>

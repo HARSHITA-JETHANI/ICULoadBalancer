@@ -15,7 +15,7 @@ const mockHospitals = [
 
 async function seedDB() {
   try {
-    await mongoose.connect('mongodb+srv://admin:admin@pulseroute.tlbqeuw.mongodb.net/PulseRoute');
+    await mongoose.connect(process.env.MONGO_URI);
     console.log("✅ Connected to MongoDB");
 
     await Hospital.deleteMany({});
