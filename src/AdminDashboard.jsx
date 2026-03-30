@@ -3,12 +3,11 @@ import { useNavigate } from "react-router-dom";
 import {
   Activity, ArrowLeft, Building2, Radio, Save, Wind,
   AlertTriangle, CheckCircle, X, Search, ChevronDown, LogIn, LogOut,
-  Bed, Loader2
+  Bed, Loader2, Clock, Users, Siren, UserCheck, History
 } from "lucide-react";
 import socket, { BACKEND_URL } from "./socket";
 
 // ─── Alarm Sound (Web Audio API) ─────────────────────────────────────────────
-// Generates a loud "beep-beep-beep" pattern without any external MP3 file.
 function playAlarmSound() {
   try {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -27,13 +26,44 @@ function playAlarmSound() {
     }
 
     const now = ctx.currentTime;
-    // Three rapid beeps, pause, three more — classic ambulance pattern
     [0, 0.2, 0.4, 0.8, 1.0, 1.2].forEach(offset => {
       beep(now + offset, 880, 0.15);
     });
   } catch (e) {
     console.warn("Audio playback failed:", e);
   }
+}
+
+// ─── Status Badge Component ──────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const cfg = {
+    "En Route":       { bg: "bg-red-500/20",    border: "border-red-500/50",    text: "text-red-400",    dot: "bg-red-400",    glow: true },
+    "Preparing Bed":  { bg: "bg-amber-500/20",  border: "border-amber-500/50",  text: "text-amber-400",  dot: "bg-amber-400",  glow: false },
+    "Admitted":       { bg: "bg-green-500/20",  border: "border-green-500/50",  text: "text-green-400",  dot: "bg-green-400",  glow: false },
+    "Discharged":     { bg: "bg-slate-500/20",  border: "border-slate-500/50",  text: "text-slate-400",  dot: "bg-slate-400",  glow: false },
+  }[status] ?? { bg: "bg-slate-500/20", border: "border-slate-500/50", text: "text-slate-400", dot: "bg-slate-400", glow: false };
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border ${cfg.bg} ${cfg.border} ${cfg.text}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot} ${cfg.glow ? "animate-pulse" : ""}`} />
+      {status}
+    </span>
+  );
+}
+
+// ─── Severity Badge Component ────────────────────────────────────────────────
+function SeverityBadge({ severity }) {
+  const cfg = {
+    "Critical": { bg: "bg-red-500/15",    text: "text-red-400",    icon: "🔴" },
+    "Severe":   { bg: "bg-orange-500/15", text: "text-orange-400", icon: "🟠" },
+    "Moderate": { bg: "bg-yellow-500/15", text: "text-yellow-400", icon: "🟡" },
+  }[severity] ?? { bg: "bg-slate-500/15", text: "text-slate-400", icon: "⚪" };
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wider uppercase ${cfg.bg} ${cfg.text}`}>
+      {cfg.icon} {severity}
+    </span>
+  );
 }
 
 // ─── Searchable Hospital Dropdown ────────────────────────────────────────────
@@ -110,13 +140,17 @@ function HospitalDropdown({ hospitals, selected, onSelect }) {
   );
 }
 
-// ─── Incoming Patient Alert Modal ────────────────────────────────────────────
-function IncomingAlertModal({ alert, onDismiss }) {
+// ─── Incoming Patient Alert Modal (Enhanced) ─────────────────────────────────
+function IncomingAlertModal({ alert, onAccept }) {
   if (!alert) return null;
 
   const ts = new Date(alert.timestamp).toLocaleTimeString("en-IN", {
     hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true
   });
+
+  const eta = alert.estimatedArrival
+    ? new Date(alert.estimatedArrival).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+    : "—";
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm animate-alert-bg">
@@ -131,20 +165,134 @@ function IncomingAlertModal({ alert, onDismiss }) {
             style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
             URGENT: INCOMING PATIENT
           </h2>
-          <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-3 mb-6">
-            <div className="text-red-300 text-sm font-mono mb-1">Dispatched At</div>
-            <div className="text-white text-2xl font-black font-mono">{ts}</div>
+
+          {/* Enhanced Info Grid */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+              <div className="text-red-300 text-[9px] font-mono tracking-widest uppercase mb-0.5">Dispatched</div>
+              <div className="text-white text-lg font-black font-mono">{ts}</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+              <div className="text-red-300 text-[9px] font-mono tracking-widest uppercase mb-0.5">ETA</div>
+              <div className="text-white text-lg font-black font-mono">{eta}</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+              <div className="text-red-300 text-[9px] font-mono tracking-widest uppercase mb-0.5">Patient ID</div>
+              <div className="text-white text-sm font-bold font-mono">{alert.patientId || "—"}</div>
+            </div>
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2">
+              <div className="text-red-300 text-[9px] font-mono tracking-widest uppercase mb-0.5">Severity</div>
+              <div className="mt-0.5"><SeverityBadge severity={alert.severity || "Critical"} /></div>
+            </div>
           </div>
-          <p className="text-slate-400 text-sm mb-8 font-mono">
+
+          <p className="text-slate-400 text-sm mb-6 font-mono">
             Prepare bed immediately. Ambulance is en route to your facility.
           </p>
-          <button
-            onClick={onDismiss}
-            className="px-8 py-3 rounded-xl bg-red-500 hover:bg-red-400 text-white font-bold
-                       tracking-wider uppercase transition-all active:scale-95 shadow-lg shadow-red-500/30"
-          >
-            ACKNOWLEDGED
-          </button>
+
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={onAccept}
+              className="px-8 py-3 rounded-xl bg-green-500 hover:bg-green-400 text-white font-bold
+                         tracking-wider uppercase transition-all active:scale-95 shadow-lg shadow-green-500/30
+                         flex items-center gap-2"
+            >
+              <UserCheck size={18} />
+              ACCEPT PATIENT
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Patient Record Card (for mobile / compact view) ─────────────────────────
+function PatientCard({ patient, onUpdateStatus }) {
+  const ts = new Date(patient.timestamp).toLocaleTimeString("en-IN", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true
+  });
+  const eta = patient.estimatedArrival
+    ? new Date(patient.estimatedArrival).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+    : "—";
+
+  const isEnRoute = patient.status === "En Route";
+
+  return (
+    <div className={`relative bg-slate-800/60 border rounded-xl p-4 transition-all duration-300 group
+      ${isEnRoute
+        ? "border-red-500/40 shadow-[0_0_20px_-5px_rgba(239,68,68,0.3)] animate-en-route-glow"
+        : patient.status === "Preparing Bed"
+          ? "border-amber-500/30"
+          : patient.status === "Admitted"
+            ? "border-green-500/30"
+            : "border-slate-700/40"
+      }`}>
+      {/* En Route scanning line effect */}
+      {isEnRoute && (
+        <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
+          <div className="absolute inset-0 bg-gradient-to-b from-red-500/5 via-transparent to-transparent animate-scan-line" />
+        </div>
+      )}
+
+      <div className="relative z-10">
+        {/* Top row: Patient ID + Status */}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-white text-sm font-bold font-mono">{patient.patientId || "—"}</span>
+            <SeverityBadge severity={patient.severity || "Critical"} />
+          </div>
+          <StatusBadge status={patient.status} />
+        </div>
+
+        {/* Info row */}
+        <div className="grid grid-cols-3 gap-3 mb-3">
+          <div>
+            <div className="text-[9px] text-slate-500 tracking-widest uppercase">Dispatched</div>
+            <div className="text-xs text-slate-300 font-mono">{ts}</div>
+          </div>
+          <div>
+            <div className="text-[9px] text-slate-500 tracking-widest uppercase">ETA</div>
+            <div className="text-xs text-slate-300 font-mono">{eta}</div>
+          </div>
+          <div>
+            <div className="text-[9px] text-slate-500 tracking-widest uppercase">Origin</div>
+            <div className="text-xs text-slate-300 font-mono truncate">{patient.origin || "Dispatch"}</div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          {patient.status === "En Route" && (
+            <button
+              onClick={() => onUpdateStatus(patient, "Preparing Bed")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg
+                         bg-amber-500/15 border border-amber-500/30 text-amber-400 text-[10px] font-bold
+                         tracking-wider uppercase hover:bg-amber-500/25 transition-all active:scale-[0.97]"
+            >
+              <Bed size={12} /> Prepare Bed
+            </button>
+          )}
+          {(patient.status === "En Route" || patient.status === "Preparing Bed") && (
+            <button
+              onClick={() => onUpdateStatus(patient, "Admitted")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg
+                         bg-green-500/15 border border-green-500/30 text-green-400 text-[10px] font-bold
+                         tracking-wider uppercase hover:bg-green-500/25 transition-all active:scale-[0.97]"
+            >
+              <UserCheck size={12} /> Mark Admitted
+            </button>
+          )}
+          {patient.status === "Admitted" && (
+            <button
+              onClick={() => onUpdateStatus(patient, "Discharged")}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg
+                         bg-slate-500/15 border border-slate-500/30 text-slate-400 text-[10px] font-bold
+                         tracking-wider uppercase hover:bg-slate-500/25 transition-all active:scale-[0.97]"
+            >
+              <LogOut size={12} /> Discharge
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -163,6 +311,10 @@ export default function AdminDashboard() {
   const [saving, setSaving]               = useState(false);
   const [saveSuccess, setSaveSuccess]     = useState(false);
   const [incomingAlert, setIncomingAlert] = useState(null);
+
+  // ── NEW: Incoming patients state ──
+  const [incomingPatients, setIncomingPatients] = useState([]);
+  const [registryTab, setRegistryTab] = useState("active"); // "active" | "history"
 
   // Editable fields
   const [editTotalBeds, setEditTotalBeds]       = useState(0);
@@ -189,13 +341,26 @@ export default function AdminDashboard() {
       if (data.hospitalId === loggedInRef.current) {
         playAlarmSound();
         setIncomingAlert(data);
+        // Also append to the patient registry
+        setIncomingPatients(prev => {
+          // De-duplicate by _id
+          if (prev.some(p => p._id === data._id)) return prev;
+          return [data, ...prev];
+        });
       }
+    }
+    function onDispatchStatusUpdated(record) {
+      // Update local state when status is changed (e.g. from another tab)
+      setIncomingPatients(prev =>
+        prev.map(p => (p._id === record._id ? { ...p, status: record.status } : p))
+      );
     }
 
     socket.on("connect", onConnect);
     socket.on("disconnect", onDisconnect);
     socket.on("hospitalsUpdated", onHospitalsUpdated);
     socket.on("incomingPatient", onIncomingPatient);
+    socket.on("dispatchStatusUpdated", onDispatchStatusUpdated);
 
     if (socket.connected) setSocketConnected(true);
 
@@ -204,9 +369,35 @@ export default function AdminDashboard() {
       socket.off("disconnect", onDisconnect);
       socket.off("hospitalsUpdated", onHospitalsUpdated);
       socket.off("incomingPatient", onIncomingPatient);
+      socket.off("dispatchStatusUpdated", onDispatchStatusUpdated);
       socket.disconnect();
     };
   }, []);
+
+  // ── Load dispatch history when hospital is logged in ──
+  useEffect(() => {
+    if (!loggedInId) {
+      setIncomingPatients([]);
+      return;
+    }
+    fetch(`${BACKEND_URL}/api/dispatches/${loggedInId}`)
+      .then(r => r.json())
+      .then(records => {
+        const mapped = records.map(r => ({
+          _id:              r._id,
+          hospitalId:       r.hospitalId,
+          hospitalName:     r.hospitalName,
+          patientId:        r.patientId,
+          severity:         r.severity,
+          origin:           r.origin,
+          status:           r.status,
+          estimatedArrival: r.estimatedArrival,
+          timestamp:        r.dispatchedAt || r.createdAt,
+        }));
+        setIncomingPatients(mapped);
+      })
+      .catch(err => console.warn("Failed to load dispatch history:", err));
+  }, [loggedInId]);
 
   // ── Sync editable fields when hospital data changes or login changes ──
   useEffect(() => {
@@ -231,6 +422,51 @@ export default function AdminDashboard() {
   function handleLogout() {
     setLoggedInId(null);
     setSelectedId(null);
+  }
+
+  // ── Accept patient from modal: dismiss alarm + update status to "Preparing Bed" ──
+  async function handleAcceptPatient() {
+    if (!incomingAlert) return;
+    const alertData = incomingAlert;
+    setIncomingAlert(null); // dismiss modal
+
+    // Update local state optimistically
+    setIncomingPatients(prev =>
+      prev.map(p => p._id === alertData._id ? { ...p, status: "Preparing Bed" } : p)
+    );
+
+    // Persist to backend
+    try {
+      await fetch(`${BACKEND_URL}/api/dispatches/${alertData._id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Preparing Bed" }),
+      });
+    } catch (err) {
+      console.warn("Failed to update dispatch status:", err);
+    }
+  }
+
+  // ── Update patient status (from card actions) ──
+  async function handleUpdateStatus(patient, newStatus) {
+    // Optimistic
+    setIncomingPatients(prev =>
+      prev.map(p => p._id === patient._id ? { ...p, status: newStatus } : p)
+    );
+
+    try {
+      await fetch(`${BACKEND_URL}/api/dispatches/${patient._id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+    } catch (err) {
+      console.warn("Failed to update status:", err);
+      // Revert
+      setIncomingPatients(prev =>
+        prev.map(p => p._id === patient._id ? { ...p, status: patient.status } : p)
+      );
+    }
   }
 
   // ── Save updates via PUT ──
@@ -265,6 +501,11 @@ export default function AdminDashboard() {
     : 0;
   const available = myHospital ? myHospital.totalBeds - myHospital.occupiedBeds : 0;
 
+  // ── Filter patients by tab ──
+  const activePatients  = incomingPatients.filter(p => ["En Route", "Preparing Bed"].includes(p.status));
+  const historyPatients = incomingPatients.filter(p => ["Admitted", "Discharged"].includes(p.status));
+  const displayPatients = registryTab === "active" ? activePatients : historyPatients;
+
   // ─── Loading state ──
   if (loading) {
     return (
@@ -280,7 +521,7 @@ export default function AdminDashboard() {
       style={{ fontFamily: "'IBM Plex Mono', 'JetBrains Mono', monospace" }}>
 
       {/* Alert Modal */}
-      <IncomingAlertModal alert={incomingAlert} onDismiss={() => setIncomingAlert(null)} />
+      <IncomingAlertModal alert={incomingAlert} onAccept={handleAcceptPatient} />
 
       {/* ── Custom animations ── */}
       <style>{`
@@ -290,6 +531,23 @@ export default function AdminDashboard() {
         .animate-alert-card { animation: alert-card 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards; }
         @keyframes slide-in { from { transform: translateX(100%) scale(0.95); opacity:0; } to { transform:translateX(0) scale(1); opacity:1; } }
         .animate-slide-in { animation: slide-in 0.25s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+        @keyframes en-route-glow {
+          0%, 100% { box-shadow: 0 0 15px -5px rgba(239,68,68,0.25); }
+          50% { box-shadow: 0 0 30px -5px rgba(239,68,68,0.5); }
+        }
+        .animate-en-route-glow { animation: en-route-glow 2s ease-in-out infinite; }
+        @keyframes scan-line {
+          0% { transform: translateY(-100%); }
+          100% { transform: translateY(200%); }
+        }
+        .animate-scan-line { animation: scan-line 3s linear infinite; }
+        @keyframes count-pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.05); }
+        }
+        .animate-count-pulse { animation: count-pulse 2s ease-in-out infinite; }
+        @keyframes fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fade-in 0.3s ease-out forwards; }
       `}</style>
 
       {/* ── Header ── */}
@@ -321,6 +579,14 @@ export default function AdminDashboard() {
           {socketConnected ? "LIVE SYNC" : "OFFLINE"}
         </div>
 
+        {/* Active patient counter in header */}
+        {loggedInId && activePatients.length > 0 && (
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-red-400 animate-count-pulse">
+            <Siren size={10} />
+            {activePatients.length} ACTIVE
+          </div>
+        )}
+
         {loggedInId && (
           <button onClick={handleLogout}
             className="ml-auto flex items-center gap-1.5 text-[10px] text-slate-400 hover:text-red-400 font-mono transition-colors">
@@ -331,53 +597,55 @@ export default function AdminDashboard() {
       </header>
 
       {/* ── Main Content ── */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-8">
+      <main className="flex-1 overflow-y-auto p-4 sm:p-8">
         {!loggedInId ? (
           /* ─── Login Screen ─── */
-          <div className="w-full max-w-md">
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 backdrop-blur-xl
-                            shadow-[0_0_60px_-15px_rgba(56,189,248,0.15)]">
-              <div className="text-center mb-8">
-                <div className="w-16 h-16 bg-sky-500/15 border border-sky-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                  <Building2 size={28} className="text-sky-400" />
+          <div className="flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+            <div className="w-full max-w-md">
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 backdrop-blur-xl
+                              shadow-[0_0_60px_-15px_rgba(56,189,248,0.15)]">
+                <div className="text-center mb-8">
+                  <div className="w-16 h-16 bg-sky-500/15 border border-sky-500/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <Building2 size={28} className="text-sky-400" />
+                  </div>
+                  <h2 className="text-2xl font-black tracking-wider text-white uppercase mb-1"
+                    style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
+                    Hospital Login
+                  </h2>
+                  <p className="text-slate-500 text-xs tracking-wider">
+                    Select your facility to access the admin panel
+                  </p>
                 </div>
-                <h2 className="text-2xl font-black tracking-wider text-white uppercase mb-1"
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif" }}>
-                  Hospital Login
-                </h2>
-                <p className="text-slate-500 text-xs tracking-wider">
-                  Select your facility to access the admin panel
-                </p>
-              </div>
 
-              <div className="mb-6">
-                <label className="text-[10px] text-slate-500 tracking-widest uppercase block mb-2">
-                  Your Hospital
-                </label>
-                <HospitalDropdown
-                  hospitals={hospitals}
-                  selected={selectedId}
-                  onSelect={setSelectedId}
-                />
-              </div>
+                <div className="mb-6">
+                  <label className="text-[10px] text-slate-500 tracking-widest uppercase block mb-2">
+                    Your Hospital
+                  </label>
+                  <HospitalDropdown
+                    hospitals={hospitals}
+                    selected={selectedId}
+                    onSelect={setSelectedId}
+                  />
+                </div>
 
-              <button
-                onClick={handleLogin}
-                disabled={!selectedId}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-                           bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500
-                           text-white font-bold tracking-wider uppercase text-sm
-                           transition-all active:scale-[0.97] shadow-lg shadow-sky-500/20
-                           disabled:shadow-none disabled:cursor-not-allowed"
-              >
-                <LogIn size={16} />
-                Access Portal
-              </button>
+                <button
+                  onClick={handleLogin}
+                  disabled={!selectedId}
+                  className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+                             bg-sky-500 hover:bg-sky-400 disabled:bg-slate-700 disabled:text-slate-500
+                             text-white font-bold tracking-wider uppercase text-sm
+                             transition-all active:scale-[0.97] shadow-lg shadow-sky-500/20
+                             disabled:shadow-none disabled:cursor-not-allowed"
+                >
+                  <LogIn size={16} />
+                  Access Portal
+                </button>
+              </div>
             </div>
           </div>
         ) : myHospital ? (
           /* ─── Dashboard ─── */
-          <div className="w-full max-w-2xl space-y-6">
+          <div className="w-full max-w-4xl mx-auto space-y-6">
             {/* Hospital Identity */}
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 backdrop-blur-xl">
               <div className="flex items-center gap-4 mb-6">
@@ -512,6 +780,89 @@ export default function AdminDashboard() {
               </button>
             </div>
 
+            {/* ═══════════════════════════════════════════════════════════════════
+                ██  LIVE PATIENT REGISTRY — "High-Tech Command Center"
+                ═══════════════════════════════════════════════════════════════════ */}
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl backdrop-blur-xl overflow-hidden">
+              {/* Registry Header */}
+              <div className="px-6 pt-6 pb-4 border-b border-slate-700/40">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold tracking-widest text-slate-300 uppercase flex items-center gap-2">
+                    <Users size={14} className="text-cyan-400" />
+                    Live Patient Registry
+                  </h3>
+                  <div className="flex items-center gap-3">
+                    {activePatients.length > 0 && (
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-500/15 border border-red-500/30">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                        <span className="text-[10px] text-red-400 font-bold font-mono">
+                          {activePatients.length} EN ROUTE / PREPARING
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Tab Switcher */}
+                <div className="flex gap-1 bg-slate-900/60 rounded-lg p-1">
+                  <button
+                    onClick={() => setRegistryTab("active")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[11px] font-bold tracking-wider uppercase transition-all
+                      ${registryTab === "active"
+                        ? "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 shadow-lg shadow-cyan-500/10"
+                        : "text-slate-500 hover:text-slate-300"
+                      }`}
+                  >
+                    <Siren size={12} />
+                    Active ({activePatients.length})
+                  </button>
+                  <button
+                    onClick={() => setRegistryTab("history")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-[11px] font-bold tracking-wider uppercase transition-all
+                      ${registryTab === "history"
+                        ? "bg-slate-500/20 text-slate-300 border border-slate-500/30"
+                        : "text-slate-500 hover:text-slate-300"
+                      }`}
+                  >
+                    <History size={12} />
+                    History ({historyPatients.length})
+                  </button>
+                </div>
+              </div>
+
+              {/* Registry Content */}
+              <div className="p-6">
+                {displayPatients.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="text-4xl mb-3 opacity-30">
+                      {registryTab === "active" ? "🫁" : "📋"}
+                    </div>
+                    <div className="text-slate-500 text-sm font-mono">
+                      {registryTab === "active"
+                        ? "No active incoming patients"
+                        : "No patient history yet"}
+                    </div>
+                    <div className="text-slate-600 text-[10px] font-mono mt-1">
+                      {registryTab === "active"
+                        ? "Patients will appear here when dispatched to your facility"
+                        : "Admitted and discharged patients will appear here"}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {displayPatients.map((patient, idx) => (
+                      <div key={patient._id} className="animate-fade-in" style={{ animationDelay: `${idx * 50}ms` }}>
+                        <PatientCard
+                          patient={patient}
+                          onUpdateStatus={handleUpdateStatus}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* ── Alert Status ── */}
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 backdrop-blur-xl">
               <h3 className="text-sm font-bold tracking-widest text-slate-300 uppercase mb-3 flex items-center gap-2">
@@ -529,7 +880,7 @@ export default function AdminDashboard() {
             </div>
           </div>
         ) : (
-          <div className="text-slate-500 text-sm">Hospital not found.</div>
+          <div className="text-slate-500 text-sm flex items-center justify-center min-h-[calc(100vh-3.5rem)]">Hospital not found.</div>
         )}
       </main>
     </div>

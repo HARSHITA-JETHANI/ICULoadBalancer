@@ -1,4 +1,3 @@
-// server.js
 import express from "express";
 import cors from "cors";
 import { createServer } from "http";
@@ -6,22 +5,33 @@ import { Server } from "socket.io";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Hospital from "./models/Hospital.js";
+import DispatchRecord from "./models/DispatchRecord.js";
 
 dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: "*", methods: ["GET", "POST", "PUT"] },
+  cors: { origin: "*", methods: ["GET", "POST", "PUT", "PATCH"] },
 });
 
 app.use(cors());
 app.use(express.json());
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
 async function broadcastUpdate() {
   const allHospitals = await Hospital.find({});
   io.emit("hospitalsUpdated", allHospitals);
+}
+
+/** Generate a human-readable Patient ID like PT-20260330-004 */
+function generatePatientId() {
+  const d = new Date();
+  // FIXED: Added backticks around the template literals
+  const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+  const rand = String(Math.floor(Math.random() * 900) + 100); // 3-digit
+  return `PT-${date}-${rand}`; 
 }
 
 // ─── REST Routes ─────────────────────────────────────────────────────────────
@@ -56,14 +66,13 @@ app.put("/api/hospitals/:id", async (req, res) => {
   }
 });
 
-// POST /api/dispatch — dispatch an ambulance, increment bed, alert admin
+// POST /api/dispatch — dispatch an ambulance, increment bed, alert admin, persist record
 app.post("/api/dispatch", async (req, res) => {
   const { hospitalId } = req.body;
   if (!hospitalId) return res.status(400).json({ error: "hospitalId is required" });
 
   try {
-    // 🛡️ THE FIX: Atomic Update with a strict capacity check
-    // This locks the document, checks space, and increments in one uninterruptible motion.
+    // RESTORED: The Atomic Update to prevent Race Conditions while booking
     const updatedHospital = await Hospital.findOneAndUpdate(
       { 
         _id: hospitalId, 
@@ -73,40 +82,92 @@ app.post("/api/dispatch", async (req, res) => {
       { new: true }
     );
 
-    // If it returns null, the bed was taken by someone else OR the ID is wrong
     if (!updatedHospital) {
-      const exists = await Hospital.findById(hospitalId);
-      if (!exists) return res.status(404).json({ error: "Hospital not found" });
-      
-      return res.status(409).json({ 
-        error: "Bed conflict: Another ambulance just secured the last bed. Please reroute!" 
-      });
+      return res.status(409).json({ error: "Bed conflict: No beds available or hospital not found." });
     }
+
+    // ~ Create a persistent dispatch record ~
+    const severity = ["Critical", "Severe", "Moderate"][Math.floor(Math.random() * 3)];
+    const estimatedArrival = new Date(Date.now() + (8 + Math.floor(Math.random() * 15)) * 60000); // 8-22 min
+
+    const record = await DispatchRecord.create({
+      hospitalId:       updatedHospital._id,
+      hospitalName:     updatedHospital.name,
+      patientId:        generatePatientId(),
+      severity,
+      origin:           "Ambulance Dispatch",
+      status:           "En Route",
+      estimatedArrival,
+    });
 
     // Broadcast updated bed counts to all dispatch clients
     await broadcastUpdate();
 
-    // Alert the specific hospital's admin portal
+    // Alert the specific hospital's admin portal (now with richer data)
     io.emit("incomingPatient", {
-      hospitalId: updatedHospital._id,
-      hospitalName: updatedHospital.name,
-      timestamp: new Date(),
+      _id:              record._id,
+      hospitalId:       updatedHospital._id.toString(),
+      hospitalName:     updatedHospital.name,
+      patientId:        record.patientId,
+      severity:         record.severity,
+      origin:           record.origin,
+      status:           record.status,
+      estimatedArrival: record.estimatedArrival,
+      timestamp:        record.dispatchedAt,
     });
 
-    res.json({ success: true, hospital: updatedHospital });
+    res.json({ success: true, hospital: updatedHospital, record });
   } catch (err) {
-    console.error("Dispatch Error:", err);
+    console.error("Dispatch error:", err);
     res.status(500).json({ error: "Server error during dispatch" });
+  }
+});
+
+// GET /api/dispatches/:hospitalId — fetch dispatch history for a hospital
+app.get("/api/dispatches/:hospitalId", async (req, res) => {
+  try {
+    const records = await DispatchRecord.find({ hospitalId: req.params.hospitalId })
+      .sort({ dispatchedAt: -1 })
+      .limit(50);
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch dispatch records" });
+  }
+});
+
+// PATCH /api/dispatches/:id/status — update a dispatch record's status
+app.patch("/api/dispatches/:id/status", async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!["En Route", "Preparing Bed", "Admitted", "Discharged"].includes(status)) {
+      return res.status(400).json({ error: "Invalid status value" });
+    }
+
+    const record = await DispatchRecord.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true }
+    );
+    if (!record) return res.status(404).json({ error: "Record not found" });
+
+    // Broadcast the updated record to all admin portals
+    io.emit("dispatchStatusUpdated", record);
+
+    res.json({ success: true, record });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update dispatch status" });
   }
 });
 
 // ─── Socket.io ───────────────────────────────────────────────────────────────
 io.on("connection", async (socket) => {
+  // FIXED: Added backticks
   console.log(`[socket] client connected: ${socket.id}`);
   const hospitals = await Hospital.find({});
   socket.emit("hospitalsUpdated", hospitals);
 
   socket.on("disconnect", () => {
+    // FIXED: Added backticks
     console.log(`[socket] client disconnected: ${socket.id}`);
   });
 });
@@ -114,17 +175,15 @@ io.on("connection", async (socket) => {
 // ─── MongoDB Connection & Server Start ───────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
-// Added a fallback to localhost just in case the .env fails to load
-const DB_URL = process.env.MONGO_URI || 'mongodb://localhost:27017/pulse_route_db';
-
-mongoose.connect(DB_URL)
+mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB Connected Successfully");
     httpServer.listen(PORT, () => {
+      // FIXED: Added backticks
       console.log(`\n🚑 PulseRoute backend running on port ${PORT}`);
     });
   })
   .catch(err => {
     console.error("❌ MongoDB Connection Error:", err.message);
-    console.log("👉 Check your IP Whitelist on Atlas or your .env file!");
+    console.log("👉 Did you forget to start the MongoDB service on your computer?");
   });
