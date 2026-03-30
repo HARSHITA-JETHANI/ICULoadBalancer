@@ -133,20 +133,6 @@ npm run dev
 
 ---
 
-## 🎓 Academic Context
-
-📚 Developed as a **6th Semester B.Tech Project**
-💡 Focus: *Real-Time Distributed Systems & Emergency Healthcare Logistics*
-
----
-
-## 👨‍💻 Author
-
-**Hriday Sethi**
-📍 Dahmi Kalan, Rajasthan
-
----
-
 ## ⭐ Why This Project Stands Out
 
 * 🚀 Real-world problem solving
@@ -162,15 +148,3 @@ npm run dev
 * 📊 Analytics dashboard for hospitals
 * 📱 Mobile app for ambulance drivers
 * 🌍 Multi-city scalability
-
----
-
-## 📝 License
-
-This project is licensed under the **MIT License**
-
----
-
-<p align="center">
-  ⭐ If you like this project, give it a star!
-</p>
