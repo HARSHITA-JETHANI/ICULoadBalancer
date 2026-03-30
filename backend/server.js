@@ -62,28 +62,40 @@ app.post("/api/dispatch", async (req, res) => {
   if (!hospitalId) return res.status(400).json({ error: "hospitalId is required" });
 
   try {
-    const hospital = await Hospital.findById(hospitalId);
-    if (!hospital) return res.status(404).json({ error: "Hospital not found" });
-    if (hospital.occupiedBeds >= hospital.totalBeds) {
-      return res.status(409).json({ error: "No beds available" });
-    }
+    // 🛡️ THE FIX: Atomic Update with a strict capacity check
+    // This locks the document, checks space, and increments in one uninterruptible motion.
+    const updatedHospital = await Hospital.findOneAndUpdate(
+      { 
+        _id: hospitalId, 
+        $expr: { $lt: ["$occupiedBeds", "$totalBeds"] } 
+      },
+      { $inc: { occupiedBeds: 1 } },
+      { new: true }
+    );
 
-    // Update in DB
-    hospital.occupiedBeds += 1;
-    await hospital.save();
+    // If it returns null, the bed was taken by someone else OR the ID is wrong
+    if (!updatedHospital) {
+      const exists = await Hospital.findById(hospitalId);
+      if (!exists) return res.status(404).json({ error: "Hospital not found" });
+      
+      return res.status(409).json({ 
+        error: "Bed conflict: Another ambulance just secured the last bed. Please reroute!" 
+      });
+    }
 
     // Broadcast updated bed counts to all dispatch clients
     await broadcastUpdate();
 
     // Alert the specific hospital's admin portal
     io.emit("incomingPatient", {
-      hospitalId: hospital._id,
-      hospitalName: hospital.name,
+      hospitalId: updatedHospital._id,
+      hospitalName: updatedHospital.name,
       timestamp: new Date(),
     });
 
-    res.json({ success: true, hospital });
+    res.json({ success: true, hospital: updatedHospital });
   } catch (err) {
+    console.error("Dispatch Error:", err);
     res.status(500).json({ error: "Server error during dispatch" });
   }
 });
@@ -102,7 +114,10 @@ io.on("connection", async (socket) => {
 // ─── MongoDB Connection & Server Start ───────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 
-mongoose.connect(process.env.MONGO_URI)
+// Added a fallback to localhost just in case the .env fails to load
+const DB_URL = process.env.MONGO_URI || 'mongodb://localhost:27017/pulse_route_db';
+
+mongoose.connect(DB_URL)
   .then(() => {
     console.log("✅ MongoDB Connected Successfully");
     httpServer.listen(PORT, () => {
@@ -111,5 +126,5 @@ mongoose.connect(process.env.MONGO_URI)
   })
   .catch(err => {
     console.error("❌ MongoDB Connection Error:", err.message);
-    console.log("👉 Did you forget to start the MongoDB service on your computer?");
+    console.log("👉 Check your IP Whitelist on Atlas or your .env file!");
   });
